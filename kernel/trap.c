@@ -65,7 +65,35 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  }else if(r_scause() == 13 || r_scause() == 15){
+    //出现问题的虚拟地址
+    uint64 vaddr = r_stval();
+    //判断合法性
+    //如果超出了分配之后的地址，并且超出了堆区的范围的话
+    if(vaddr>=p->sz|| vaddr <= PGROUNDDOWN(p->trapframe->sp))
+    {
+      p->killed = 1;
+    }else{
+      void *pa = kalloc();
+      if(pa==0)
+      {
+        p->killed = 1;
+      }else{
+        memset(pa, 0, PGSIZE);
+        //创建映射关系
+        if(mappages(p->pagetable, PGROUNDDOWN(vaddr), PGSIZE, (uint64)pa, PTE_W|PTE_X|PTE_R|PTE_U)!=0)
+        {
+          kfree(pa);
+          p->killed = 1;
+        }
+      }
+
+    }
+
+  } 
+  
+  
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
